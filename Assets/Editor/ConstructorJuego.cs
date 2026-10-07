@@ -448,6 +448,20 @@ public static class ConstructorJuego
         bv.isTrigger = true;
         bv.size = new Vector2((xMaxNivel - xMinNivel + 40) * Celda, 0.5f);
 
+        // Meta: cofre al final del nivel
+        var cofre = new GameObject("Cofre");
+        var csr = cofre.AddComponent<SpriteRenderer>();
+        csr.sprite = SpriteDecoracion("Cofre_Cerrado");
+        csr.sortingOrder = 1;
+        cofre.transform.position = new Vector3(200.5f * Celda, Sup(-3), 0);
+        var cbox = cofre.AddComponent<BoxCollider2D>();
+        cbox.isTrigger = true;
+        cbox.size = new Vector2(0.3f, 0.3f);
+        cbox.offset = new Vector2(0, 0.15f);
+        var meta = cofre.AddComponent<Meta>();
+        meta.cofreAbierto = SpriteDecoracion("Cofre_Abierto");
+        meta.audioAbrir = Audio("Efectos/01_chest_open_1.wav");
+
         // UI: contador de abejas
         var canvas = NuevoCanvas();
         var marcador = new GameObject("Marcador", typeof(RectTransform), typeof(Image));
@@ -496,6 +510,25 @@ public static class ConstructorJuego
         partida.panelGameOver = gameOver;
         partida.textoGameOver = subGameOver;
         gameOver.SetActive(false);
+
+        // Pantalla de victoria
+        var (victoria, subVictoria) = PanelPantalla(canvas.transform, "PanelVictoria", "¡NIVEL COMPLETADO!", new Color(1f, 0.82f, 0.29f));
+        subVictoria.rectTransform.anchoredPosition = new Vector2(0, 40);
+        subVictoria.rectTransform.sizeDelta = new Vector2(1400, 260);
+        var otraVez = Boton(victoria.transform, recursos, "JUGAR DE NUEVO", new Vector2(0, -170), "BLANK_BOTTOM");
+        var menuV = Boton(victoria.transform, recursos, "MENU", new Vector2(0, -310), "BLANK_BOTTOM");
+        UnityEventTools.AddPersistentListener(otraVez.onClick, partida.Reintentar);
+        UnityEventTools.AddPersistentListener(menuV.onClick, partida.IrAlMenu);
+        partida.panelVictoria = victoria;
+        partida.textoVictoria = subVictoria;
+        victoria.SetActive(false);
+
+        // Cronómetro arriba a la derecha
+        var tiempo = Texto(canvas.transform, "TxtTiempo", "00:00", 64, Vector2.zero, new Vector2(300, 100));
+        tiempo.rectTransform.anchorMin = tiempo.rectTransform.anchorMax = tiempo.rectTransform.pivot = new Vector2(1, 1);
+        tiempo.rectTransform.anchoredPosition = new Vector2(-30, -20);
+        tiempo.alignment = TextAlignmentOptions.MidlineRight;
+        partida.textoTiempo = tiempo;
 
         EditorSceneManager.MarkSceneDirty(escena);
         EditorSceneManager.SaveScene(escena);

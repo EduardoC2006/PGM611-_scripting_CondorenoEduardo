@@ -35,6 +35,8 @@ public class Jugador : MonoBehaviour
     public float tiempoInvulnerable = 1.2f;
     private float invulnerableHasta;
     private bool muerto = false;
+    private bool gano = false;
+    public int Abejas => cantAbejas;
     private SpriteRenderer sr;
     private Vector3 ultimoPisoSeguro;
 
@@ -58,7 +60,7 @@ public class Jugador : MonoBehaviour
 
     void Update()
     {
-        if (muerto) return;
+        if (muerto || gano) return;
         if (!enRetroceso)
         {
             movimiento = Input.GetAxisRaw("Horizontal");
@@ -87,7 +89,7 @@ public class Jugador : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (muerto) return;
+        if (muerto || gano) return;
         if (collision.transform.CompareTag("abejita"))
         {
             Sonar(audioAbeja);
@@ -121,7 +123,7 @@ public class Jugador : MonoBehaviour
 
     public void RecibirDanio(Vector3 origen)
     {
-        if (muerto || Time.time < invulnerableHasta) return;
+        if (muerto || gano || Time.time < invulnerableHasta) return;
         PerderVida();
         if (muerto) return;
         // Empujón hacia atrás
@@ -161,6 +163,16 @@ public class Jugador : MonoBehaviour
         animator.SetTrigger("Muerto");
         Sonar(audioMuerte);
         Invoke(nameof(FinDeMuerte), 1.5f);
+    }
+
+    // Llegó a la meta: se queda quieto celebrando
+    public void Celebrar()
+    {
+        gano = true;
+        movimiento = 0;
+        sr.enabled = true;
+        rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+        animator.SetFloat("Velocidad", 0);
     }
 
     void FinDeMuerte()
