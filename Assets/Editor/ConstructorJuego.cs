@@ -292,6 +292,9 @@ public static class ConstructorJuego
         musica.playOnAwake = true;
         musica.volume = 0.35f;
 
+        // Paisaje: montañas, bosques y pinos con parallax
+        ConstruirPaisaje(-4f, 20f, -2 * Celda);
+
         // Grid + Tilemaps
         var grid = new GameObject("Grid").AddComponent<Grid>();
         grid.cellSize = new Vector3(Celda, Celda, 0);
@@ -462,6 +465,85 @@ public static class ConstructorJuego
         (Sprite)AnimationUtility.GetObjectReferenceCurve(clip, AnimationUtility.GetObjectReferenceCurveBindings(clip)[0])[0].value;
 
     static AudioClip Audio(string ruta) => AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/" + ruta);
+
+    // ---------------------------------------------------------- Paisaje
+    const string RutaPaisaje = "Assets/Sprites/Paisaje/";
+
+    static void ConstruirPaisaje(float xMin, float xMax, float sueloY)
+    {
+        var raiz = new GameObject("Paisaje").transform;
+        float ancho = (xMax - xMin) + 30f; // margen para el desplazamiento del parallax
+        float centro = (xMin + xMax) / 2f;
+
+        // Capas que se repiten a lo ancho (de la más lejana a la más cercana)
+        CapaRepetida(raiz, "Montanas_Claras", centro, sueloY - 0.9f, ancho, -9, 0.85f, 0.9f, 1.0f, new Color(0.85f, 0.95f, 0.95f));
+        CapaRepetida(raiz, "Montanas_Oscuras", centro, sueloY - 1.2f, ancho, -8, 0.75f, 0.8f, 0.9f, new Color(0.8f, 0.92f, 0.92f));
+        CapaRepetida(raiz, "Bosque_Claro", centro, sueloY - 1.4f, ancho, -7, 0.6f, 0.65f, 1.0f, Color.white);
+        CapaRepetida(raiz, "Bosque_Oscuro", centro, sueloY - 1.5f, ancho, -6, 0.4f, 0.45f, 1.0f, Color.white);
+
+        // Pinos sueltos justo detrás del piso
+        var pinos = new GameObject("Pinos").transform;
+        pinos.SetParent(raiz, false);
+        string[] colores = { "Green", "Dark", "Green", "Golden", "Green", "Dark", "Yellow", "Green", "Red" };
+        string[] tamanos = { "Grande", "Mediano", "Chico" };
+        var azar = new System.Random(7);
+        int i = 0;
+        for (float x = xMin - 1.5f; x < xMax + 1.5f; x += 0.7f + (float)azar.NextDouble() * 0.9f, i++)
+        {
+            string tam = tamanos[azar.Next(tamanos.Length)];
+            var sr = new GameObject($"Pino_{i}").AddComponent<SpriteRenderer>();
+            sr.sprite = SpritePaisaje($"Pino_{tam}_{colores[azar.Next(colores.Length)]}", false);
+            sr.sortingOrder = -5;
+            sr.color = new Color(0.78f, 0.85f, 0.8f); // un poco más apagados que el primer plano
+            sr.transform.SetParent(pinos, false);
+            sr.transform.position = new Vector3(x, sueloY - 0.1f, 0);
+            sr.flipX = azar.Next(2) == 0;
+        }
+        var px = pinos.gameObject.AddComponent<Parallax>();
+        px.factorX = 0.15f; px.factorY = 0.15f;
+    }
+
+    static void CapaRepetida(Transform raiz, string nombre, float x, float y, float ancho, int orden,
+        float factorX, float factorY, float escala, Color color)
+    {
+        var sr = new GameObject(nombre).AddComponent<SpriteRenderer>();
+        sr.sprite = SpritePaisaje(nombre, true);
+        sr.drawMode = SpriteDrawMode.Tiled;
+        sr.size = new Vector2(ancho / escala, sr.sprite.bounds.size.y);
+        sr.sortingOrder = orden;
+        sr.color = color;
+        sr.transform.SetParent(raiz, false);
+        sr.transform.position = new Vector3(x, y, 0);
+        sr.transform.localScale = new Vector3(escala, escala, 1);
+        var p = sr.gameObject.AddComponent<Parallax>();
+        p.factorX = factorX; p.factorY = factorY;
+    }
+
+    // Importa un PNG del paisaje como sprite pixel art con pivote abajo al centro
+    static Sprite SpritePaisaje(string nombre, bool repetible)
+    {
+        string ruta = RutaPaisaje + nombre + ".png";
+        var imp = (TextureImporter)AssetImporter.GetAtPath(ruta);
+        var ajustes = new TextureImporterSettings();
+        imp.ReadTextureSettings(ajustes);
+        bool cambiar = imp.textureType != TextureImporterType.Sprite || imp.filterMode != FilterMode.Point
+            || ajustes.spriteAlignment != (int)SpriteAlignment.BottomCenter
+            || (repetible && ajustes.spriteMeshType != SpriteMeshType.FullRect);
+        if (cambiar)
+        {
+            imp.textureType = TextureImporterType.Sprite;
+            imp.spriteImportMode = SpriteImportMode.Single;
+            imp.filterMode = FilterMode.Point;
+            imp.textureCompression = TextureImporterCompression.Uncompressed;
+            imp.wrapMode = repetible ? TextureWrapMode.Repeat : TextureWrapMode.Clamp;
+            imp.ReadTextureSettings(ajustes);
+            ajustes.spriteAlignment = (int)SpriteAlignment.BottomCenter;
+            ajustes.spriteMeshType = repetible ? SpriteMeshType.FullRect : SpriteMeshType.Tight;
+            imp.SetTextureSettings(ajustes);
+            imp.SaveAndReimport();
+        }
+        return AssetDatabase.LoadAssetAtPath<Sprite>(ruta);
+    }
 
     static Sprite SpriteBoton(string nombre)
     {
