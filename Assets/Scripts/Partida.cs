@@ -9,6 +9,7 @@ public class Partida : MonoBehaviour
 
     public GameObject panelGameOver;
     public TMP_Text textoGameOver;
+    public GameObject panelPausa;
     public GameObject panelVictoria;
     public TMP_Text textoVictoria;
     public TMP_Text textoTiempo;
@@ -17,11 +18,13 @@ public class Partida : MonoBehaviour
     private float tiempo;
     private bool terminada = false;
     private int totalAbejas;
+    public bool EnPausa { get; private set; }
 
     void Awake()
     {
         instancia = this;
         Time.timeScale = 1f;
+        AudioListener.volume = PlayerPrefs.GetFloat("Volumen", 1f);
     }
 
     void Start()
@@ -32,6 +35,10 @@ public class Partida : MonoBehaviour
     void Update()
     {
         if (terminada) return;
+        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
+        {
+            if (EnPausa) Continuar(); else Pausar();
+        }
         tiempo += Time.deltaTime;
         if (textoTiempo != null) textoTiempo.text = FormatoTiempo(tiempo);
     }
@@ -76,6 +83,22 @@ public class Partida : MonoBehaviour
         int min = (int)(t / 60f);
         int seg = (int)(t % 60f);
         return $"{min:00}:{seg:00}";
+    }
+
+    public void Pausar()
+    {
+        EnPausa = true;
+        Time.timeScale = 0f;
+        if (musica != null) musica.Pause();
+        panelPausa.SetActive(true);
+    }
+
+    public void Continuar()
+    {
+        EnPausa = false;
+        Time.timeScale = 1f;
+        if (musica != null) musica.UnPause();
+        panelPausa.SetActive(false);
     }
 
     public void Reintentar()

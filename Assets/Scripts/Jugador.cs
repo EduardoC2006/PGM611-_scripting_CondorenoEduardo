@@ -60,7 +60,7 @@ public class Jugador : MonoBehaviour
 
     void Update()
     {
-        if (muerto || gano) return;
+        if (muerto || gano || Time.timeScale == 0f) return;
         if (!enRetroceso)
         {
             movimiento = Input.GetAxisRaw("Horizontal");

@@ -345,17 +345,7 @@ public static class ConstructorJuego
         cam.orthographicSize = 1.5f;
         cam.backgroundColor = new Color(0.12f, 0.16f, 0.12f);
 
-        // Fondo: hijo de la cámara para que siempre cubra la pantalla
-        var fondoSprite = AssetDatabase.LoadAllAssetsAtPath(Pack + "/Background/Background.aseprite").OfType<Sprite>().First();
-        var fondo = new GameObject("Background");
-        var fsr = fondo.AddComponent<SpriteRenderer>();
-        fsr.sprite = fondoSprite;
-        fsr.sortingOrder = -10;
-        fondo.transform.SetParent(cam.transform, false);
-        float escala = 3.2f / fondoSprite.bounds.size.y;
-        fondo.transform.localPosition = new Vector3(-fondoSprite.bounds.center.x * escala, -fondoSprite.bounds.center.y * escala, 10);
-        fondo.transform.localScale = new Vector3(escala, escala, 1);
-        fondo.AddComponent<FondoCamara>(); // lo estira para cubrir toda la cámara
+        FondoCielo(cam);
 
         // Música de fondo en loop
         var musica = new GameObject("Musica").AddComponent<AudioSource>();
@@ -391,20 +381,7 @@ public static class ConstructorJuego
         piso.gameObject.AddComponent<TilemapCollider2D>();
         var deco = NuevoTilemap(grid, "Decoracion", 1);
 
-        // Bloque de pasto (5x5 arriba a la izquierda del spritesheet de Tiles)
-        TileBase T(int fila, int col) => Tile(fila, col);
-        void Plataforma(int x0, int x1, int ySup, int prof)
-        {
-            for (int x = x0; x <= x1; x++)
-            {
-                int col = x == x0 ? 0 : x == x1 ? 4 : 1 + (x - x0 - 1) % 3;
-                deco.SetTile(new Vector3Int(x, ySup + 1, 0), T(0, col));
-                piso.SetTile(new Vector3Int(x, ySup, 0), T(1, col));
-                for (int y = ySup - 1; y > ySup - prof; y--)
-                    piso.SetTile(new Vector3Int(x, y, 0), T(2 + (ySup - 1 - y) % 2, col));
-                piso.SetTile(new Vector3Int(x, ySup - prof, 0), T(4, col));
-            }
-        }
+        void Plataforma(int x0, int x1, int ySup, int prof) => PintarBloque(piso, deco, x0, x1, ySup, prof);
         foreach (var (x0, x1, y) in suelos) Plataforma(x0, x1, y, y + 8);
         foreach (var (x0, x1, y) in flotantes) Plataforma(x0, x1, y, 1);
 
@@ -511,6 +488,16 @@ public static class ConstructorJuego
         partida.textoGameOver = subGameOver;
         gameOver.SetActive(false);
 
+        // Pantalla de pausa (Esc o P)
+        var (pausa, subPausa) = PanelPantalla(canvas.transform, "PanelPausa", "PAUSA", new Color(0.9f, 0.95f, 0.9f));
+        subPausa.text = "Presiona Esc o P para continuar";
+        var continuar = Boton(pausa.transform, recursos, "CONTINUAR", new Vector2(0, -90), "BLANK_BOTTOM");
+        var menuP = Boton(pausa.transform, recursos, "MENU", new Vector2(0, -230), "BLANK_BOTTOM");
+        UnityEventTools.AddPersistentListener(continuar.onClick, partida.Continuar);
+        UnityEventTools.AddPersistentListener(menuP.onClick, partida.IrAlMenu);
+        partida.panelPausa = pausa;
+        pausa.SetActive(false);
+
         // Pantalla de victoria
         var (victoria, subVictoria) = PanelPantalla(canvas.transform, "PanelVictoria", "¡NIVEL COMPLETADO!", new Color(1f, 0.82f, 0.29f));
         subVictoria.rectTransform.anchoredPosition = new Vector2(0, 40);
@@ -540,50 +527,159 @@ public static class ConstructorJuego
         const string ruta = "Assets/Scenes/MenuPrincipal.unity";
         var escena = EscenaDesdePlantilla(ruta);
         var cam = Camera.main;
+        cam.orthographicSize = 1.5f;
+        cam.transform.position = new Vector3(0, 0, -10);
         var opciones = cam.gameObject.AddComponent<OpcionesMenu>();
+
+        // Fondo animado: cielo, montañas y bosques que se desplazan solos
+        FondoCielo(cam);
+        float suelo = -1.0f;
+        CapaMenu("Montanas_Claras", suelo - 0.9f, -9, -0.03f, new Color(0.85f, 0.95f, 0.95f));
+        CapaMenu("Montanas_Oscuras", suelo - 1.2f, -8, -0.05f, new Color(0.8f, 0.92f, 0.92f));
+        CapaMenu("Bosque_Claro", suelo - 1.4f, -7, -0.08f, Color.white);
+        CapaMenu("Bosque_Oscuro", suelo - 1.5f, -6, -0.12f, Color.white);
+
+        // Piso de pasto con decoración
+        var grid = new GameObject("Grid").AddComponent<Grid>();
+        grid.cellSize = new Vector3(Celda, Celda, 0);
+        var piso = NuevoTilemap(grid, "Piso", 0);
+        var deco = NuevoTilemap(grid, "Decoracion", 1);
+        int filaSuelo = Mathf.RoundToInt(suelo / Celda) - 1;
+        PintarBloque(piso, deco, -22, 22, filaSuelo, 4);
+        void Adorno(string n, float x, int orden, bool flip = false)
+        {
+            var sr = new GameObject(n).AddComponent<SpriteRenderer>();
+            sr.sprite = SpriteDecoracion(n);
+            sr.sortingOrder = orden;
+            sr.flipX = flip;
+            sr.transform.position = new Vector3(x, suelo - 0.02f, 0);
+        }
+        Adorno("Arbusto_1", -2.4f, -2); Adorno("Hongo_Grande", -1.3f, -1); Adorno("Roca_Musgo_1", 1.5f, -2);
+        Adorno("Arbusto_2", 2.6f, -2, true); Adorno("Flor_Azul", 0.9f, -1); Adorno("Pasto", -0.6f, 3);
+        Adorno("Hongo_Chico_1", 2.1f, -1); Adorno("Cofre_Cerrado", 2.05f, 1);
+
+        // El caballero en reposo y un par de abejas
+        var caballero = new GameObject("Caballero");
+        var csr = caballero.AddComponent<SpriteRenderer>();
+        var ctrl = AssetDatabase.LoadAssetAtPath<AnimatorController>("Assets/Animaciones/Jugador/PjController.controller");
+        csr.sprite = PrimerSprite(AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Animaciones/Jugador/Idle.anim"));
+        csr.sortingOrder = 2;
+        caballero.AddComponent<Animator>().runtimeAnimatorController = ctrl;
+        caballero.transform.position = new Vector3(-1.9f, suelo - 0.16f, 0);
+        var abeja = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Abeja.prefab");
+        foreach (var (x, y) in new[] { (1.85f, suelo + 0.35f), (2.35f, suelo + 0.7f) })
+            ((GameObject)PrefabUtility.InstantiatePrefab(abeja)).transform.position = new Vector3(x, y, 0);
+
+        // Música del menú
+        var musica = new GameObject("Musica").AddComponent<AudioSource>();
+        musica.clip = Audio("Musica/Goblins_Den_(Regular).wav");
+        musica.loop = true;
+        musica.volume = 0.3f;
 
         var canvas = NuevoCanvas();
         var recursos = RecursosUI();
 
-        // Fondo
-        var fondo = new GameObject("Fondo", typeof(RectTransform), typeof(Image));
-        fondo.transform.SetParent(canvas.transform, false);
-        fondo.GetComponent<Image>().sprite = AssetDatabase.LoadAllAssetsAtPath(Pack + "/Background/Background.aseprite").OfType<Sprite>().First();
-        Estirar(fondo.GetComponent<RectTransform>());
-
-        var titulo = Texto(canvas.transform, "Titulo", "High Forest", 110, new Vector2(0, 300), new Vector2(1400, 160));
+        var titulo = Texto(canvas.transform, "Titulo", "High Forest", 130, new Vector2(0, 330), new Vector2(1400, 170));
         titulo.fontStyle = FontStyles.Bold;
-        Texto(canvas.transform, "Autor", "Jhoel Condoreno", 48, new Vector2(0, 190), new Vector2(1000, 80));
+        titulo.color = new Color(0.12f, 0.24f, 0.17f);
+        var autor = Texto(canvas.transform, "Autor", "Jhoel Condoreno", 48, new Vector2(0, 215), new Vector2(1000, 80));
+        autor.color = new Color(0.2f, 0.32f, 0.25f);
 
-        var jugar = Boton(canvas.transform, recursos, "Jugar", new Vector2(0, 30), "PLAY_BOTTOM_PIXEL");
-        var btnOpciones = Boton(canvas.transform, recursos, "Opciones", new Vector2(0, -110), "OPTIONS_BOTTOM_PIXEL");
-        var salir = Boton(canvas.transform, recursos, "Salir", new Vector2(0, -250), "EXIT_BOTTOM_PIXEL");
+        var jugar = Boton(canvas.transform, recursos, "Jugar", new Vector2(0, 60), "PLAY_BOTTOM_PIXEL");
+        var btnOpciones = Boton(canvas.transform, recursos, "Opciones", new Vector2(0, -80), "OPTIONS_BOTTOM_PIXEL");
+        var salir = Boton(canvas.transform, recursos, "Salir", new Vector2(0, -220), "EXIT_BOTTOM_PIXEL");
         UnityEventTools.AddPersistentListener(jugar.onClick, opciones.vamosAjugar);
         UnityEventTools.AddPersistentListener(salir.onClick, opciones.salir);
 
+        // Récord guardado (se llena desde OpcionesMenu)
+        var record = Texto(canvas.transform, "TxtRecord", "", 40, new Vector2(0, -470), new Vector2(1600, 70));
+        record.color = new Color(1f, 0.85f, 0.4f);
+        opciones.textoRecord = record;
+
         // Panel de opciones (desactivado; el botón Opciones lo activa)
-        var panelito = new GameObject("Panelito", typeof(RectTransform));
+        var panelito = new GameObject("Panelito", typeof(RectTransform), typeof(Image));
         panelito.transform.SetParent(canvas.transform, false);
         Estirar(panelito.GetComponent<RectTransform>());
+        panelito.GetComponent<Image>().color = new Color(0, 0, 0, 0.55f);
         var panel = new GameObject("Panel de opciones", typeof(RectTransform), typeof(Image));
         panel.transform.SetParent(panelito.transform, false);
-        var pimg = panel.GetComponent<Image>();
-        pimg.sprite = null;
-        
-        pimg.color = new Color(0.16f, 0.2f, 0.12f, 1f);
-        var prt = panel.GetComponent<RectTransform>();
-        prt.sizeDelta = new Vector2(900, 600);
-        Texto(panel.transform, "TxtOpciones", "Opciones", 72, new Vector2(0, 200), new Vector2(800, 100));
+        panel.GetComponent<Image>().color = new Color(0.16f, 0.2f, 0.12f, 1f);
+        panel.GetComponent<RectTransform>().sizeDelta = new Vector2(1000, 820);
+        Texto(panel.transform, "TxtOpciones", "Opciones", 72, new Vector2(0, 330), new Vector2(800, 100));
+        Texto(panel.transform, "TxtVolumen", "Volumen", 44, new Vector2(0, 230), new Vector2(800, 70));
+        opciones.volumen = Deslizador(panel.transform, new Vector2(0, 165), new Vector2(600, 40));
         Texto(panel.transform, "TxtControles",
-            "Moverse: A / D o flechas\nSaltar: Espacio\nAtacar: clic izquierdo o Ctrl\nRecolecta abejas, pisa caracoles\ny evita a los puerquitos",
-            40, new Vector2(0, 20), new Vector2(800, 280));
-        var cerrar = Boton(panel.transform, recursos, "Cerrar", new Vector2(0, -200), "BLANK_BOTTOM");
+            "Moverse: A / D o flechas\nSaltar: Espacio\nAtacar: clic izquierdo o Ctrl\nPausa: Esc o P\n\n" +
+            "Recolecta abejas, pisa caracoles, evita a los\njabalíes y llega al cofre del final.",
+            38, new Vector2(0, -50), new Vector2(900, 360));
+        var cerrar = Boton(panel.transform, recursos, "Cerrar", new Vector2(0, -320), "BLANK_BOTTOM");
         UnityEventTools.AddBoolPersistentListener(btnOpciones.onClick, panelito.SetActive, true);
         UnityEventTools.AddBoolPersistentListener(cerrar.onClick, panelito.SetActive, false);
         panelito.SetActive(false);
 
         EditorSceneManager.MarkSceneDirty(escena);
         EditorSceneManager.SaveScene(escena);
+    }
+
+    static void CapaMenu(string nombre, float y, int orden, float velocidad, Color color)
+    {
+        var sr = new GameObject(nombre).AddComponent<SpriteRenderer>();
+        sr.sprite = SpritePaisaje(nombre, true);
+        sr.drawMode = SpriteDrawMode.Tiled;
+        sr.size = new Vector2(20f, sr.sprite.bounds.size.y);
+        sr.sortingOrder = orden;
+        sr.color = color;
+        sr.transform.position = new Vector3(0, y, 0);
+        sr.gameObject.AddComponent<Desplazar>().velocidad = velocidad;
+    }
+
+    static Slider Deslizador(Transform padre, Vector2 pos, Vector2 tam)
+    {
+        var go = DefaultControls.CreateSlider(new DefaultControls.Resources
+        {
+            standard = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"),
+            background = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd"),
+            knob = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd"),
+        });
+        go.name = "Volumen";
+        go.transform.SetParent(padre, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = tam;
+        var slider = go.GetComponent<Slider>();
+        slider.minValue = 0; slider.maxValue = 1; slider.value = 1;
+        slider.fillRect.GetComponent<Image>().color = new Color(0.85f, 0.75f, 0.35f);
+        slider.handleRect.sizeDelta = new Vector2(50, 0);
+        return slider;
+    }
+
+    // Cielo hijo de la cámara, estirado para cubrir siempre toda la vista
+    static void FondoCielo(Camera cam)
+    {
+        var fondoSprite = AssetDatabase.LoadAllAssetsAtPath(Pack + "/Background/Background.aseprite").OfType<Sprite>().First();
+        var fondo = new GameObject("Background");
+        var fsr = fondo.AddComponent<SpriteRenderer>();
+        fsr.sprite = fondoSprite;
+        fsr.sortingOrder = -10;
+        fondo.transform.SetParent(cam.transform, false);
+        float escala = 3.2f / fondoSprite.bounds.size.y;
+        fondo.transform.localPosition = new Vector3(-fondoSprite.bounds.center.x * escala, -fondoSprite.bounds.center.y * escala, 10);
+        fondo.transform.localScale = new Vector3(escala, escala, 1);
+        fondo.AddComponent<FondoCamara>();
+    }
+
+    // Bloque de pasto (5x5 arriba a la izquierda del spritesheet de Tiles)
+    static void PintarBloque(Tilemap piso, Tilemap deco, int x0, int x1, int ySup, int prof)
+    {
+        for (int x = x0; x <= x1; x++)
+        {
+            int col = x == x0 ? 0 : x == x1 ? 4 : 1 + (x - x0 - 1) % 3;
+            deco.SetTile(new Vector3Int(x, ySup + 1, 0), Tile(0, col));
+            piso.SetTile(new Vector3Int(x, ySup, 0), Tile(1, col));
+            for (int y = ySup - 1; y > ySup - prof; y--)
+                piso.SetTile(new Vector3Int(x, y, 0), Tile(2 + (ySup - 1 - y) % 2, col));
+            piso.SetTile(new Vector3Int(x, ySup - prof, 0), Tile(4, col));
+        }
     }
 
     // ------------------------------------------------------------ Pantallas
