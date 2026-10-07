@@ -127,7 +127,7 @@ public static class ConstructorJuego
         var ataque = ExportarClip(Pack + "/Character/Attack-01/Attack-01.aseprite", dir, "Attack-01", false);
 
         // PjController con parámetros y transiciones del PDF
-        var ctrl = AnimatorController.CreateAnimatorControllerAtPath(dir + "/PjController.controller");
+        var ctrl = Controlador(dir + "/PjController.controller");
         ctrl.AddParameter("Velocidad", AnimatorControllerParameterType.Float);
         ctrl.AddParameter("VelocidadVertical", AnimatorControllerParameterType.Float);
         ctrl.AddParameter("estaEnPiso", AnimatorControllerParameterType.Bool);
@@ -251,7 +251,8 @@ public static class ConstructorJuego
 
     static GameObject Mob(string nombre, AnimationClip clip, string rutaCtrl, string tag)
     {
-        var ctrl = AnimatorController.CreateAnimatorControllerAtPathWithClip(rutaCtrl, clip);
+        var ctrl = Controlador(rutaCtrl);
+        ctrl.layers[0].stateMachine.AddState(clip.name).motion = clip;
         var go = new GameObject(nombre) { tag = tag };
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite = PrimerSprite(clip);
@@ -264,9 +265,7 @@ public static class ConstructorJuego
     static void ConstruirEscenaJuego(GameObject jugador, GameObject abeja, GameObject puerquito, GameObject caracol)
     {
         const string ruta = "Assets/Scenes/Juego.unity";
-        AssetDatabase.DeleteAsset(ruta);
-        AssetDatabase.CopyAsset("Assets/Scenes/SampleScene.unity", ruta);
-        var escena = EditorSceneManager.OpenScene(ruta);
+        var escena = EscenaDesdePlantilla(ruta);
 
         // Cámara
         var cam = Camera.main;
@@ -292,8 +291,24 @@ public static class ConstructorJuego
         musica.playOnAwake = true;
         musica.volume = 0.35f;
 
+        // ---- Diseño del nivel (coordenadas en casillas de 16 px) ----
+        // Suelos: (desde, hasta, fila de la superficie). Todos bajan hasta la fila -8.
+        var suelos = new (int x0, int x1, int y)[]
+        {
+            (-14, 30, -3), (35, 49, -3), (50, 62, -1), (67, 95, -3), (96, 110, -2),
+            (116, 140, -3), (157, 170, -3), (171, 182, -1), (183, 205, -3),
+        };
+        // Plataformas flotantes de un bloque de alto
+        var flotantes = new (int x0, int x1, int y)[]
+        {
+            (10, 15, 1), (42, 47, 1), (53, 58, 3), (80, 86, 1), (100, 104, 2),
+            (125, 130, 0), (143, 146, -1), (150, 153, 0), (175, 179, 3),
+        };
+        int xMinNivel = -14, xMaxNivel = 205;
+        float Sup(int fila) => (fila + 1) * Celda; // altura del borde superior de una fila
+
         // Paisaje: montañas, bosques y pinos con parallax
-        ConstruirPaisaje(-4f, 20f, -2 * Celda);
+        ConstruirPaisaje(xMinNivel * Celda, xMaxNivel * Celda, Sup(-3));
 
         // Grid + Tilemaps
         var grid = new GameObject("Grid").AddComponent<Grid>();
@@ -317,48 +332,48 @@ public static class ConstructorJuego
                 piso.SetTile(new Vector3Int(x, ySup - prof, 0), T(4, col));
             }
         }
-        // Piso principal con huecos
-        Plataforma(-14, 30, -3, 5);
-        Plataforma(35, 62, -3, 5);
-        Plataforma(67, 110, -3, 5);
-        // Plataformas flotantes
-        Plataforma(10, 15, 1, 1);
-        Plataforma(44, 49, 1, 1);
-        Plataforma(52, 57, 4, 1);
-        Plataforma(80, 86, 1, 1);
+        foreach (var (x0, x1, y) in suelos) Plataforma(x0, x1, y, y + 8);
+        foreach (var (x0, x1, y) in flotantes) Plataforma(x0, x1, y, 1);
 
         // Paredes invisibles a los lados
-        Pared(piso.gameObject, new Vector2(-14.5f * Celda, 1f));
-        Pared(piso.gameObject, new Vector2(110.5f * Celda + Celda, 1f));
+        Pared(piso.gameObject, new Vector2((xMinNivel - 0.5f) * Celda, 1f));
+        Pared(piso.gameObject, new Vector2((xMaxNivel + 1.5f) * Celda, 1f));
+
+        // Decoración sobre los suelos (detrás del personaje)
+        ConstruirDecoracion(suelos, flotantes, Celda);
 
         // Personaje
-        float sueloY = -2 * Celda; // borde superior de la fila -3
         var pj = (GameObject)PrefabUtility.InstantiatePrefab(jugador);
-        pj.transform.position = new Vector3(-8 * Celda, sueloY + 0.1f, 0);
+        pj.transform.position = new Vector3(-8 * Celda, Sup(-3) + 0.1f, 0);
 
         cam.gameObject.AddComponent<Camara>().target = pj.transform;
         cam.transform.position = new Vector3(pj.transform.position.x, pj.transform.position.y, -10);
 
-        // Abejas para recolectar
+        // Abejas para recolectar: (x, fila de la superficie debajo, altura extra en casillas)
         var abejas = new GameObject("Abejas");
-        float[] xs = { -2, 4, 12.5f, 22, 38, 46.5f, 54.5f, 72, 83, 95, 104 };
-        float[] ys = { 0.35f, 0.35f, 0.95f, 0.35f, 0.35f, 0.95f, 1.45f, 0.35f, 0.95f, 0.35f, 0.35f };
-        for (int i = 0; i < xs.Length; i++)
-            Colocar(abeja, abejas.transform, xs[i] * Celda, sueloY + ys[i] - 0.35f);
+        var posAbejas = new (float x, int y, float extra)[]
+        {
+            (-2, -3, 0), (4, -3, 0), (12.5f, 1, 0), (22, -3, 0), (38, -3, 0), (44.5f, 1, 0),
+            (55.5f, 3, 0), (60, -1, 0), (72, -3, 0), (83, 1, 0), (92, -3, 0), (102, 2, 0),
+            (108, -2, 0), (113, -3, 5), (120, -3, 0), (127.5f, 0, 0), (144.5f, -1, 0), (151.5f, 0, 0),
+            (162, -3, 0), (168, -3, 0), (177, 3, 0), (186, -3, 0), (191, -3, 0),
+        };
+        foreach (var (x, y, extra) in posAbejas)
+            Colocar(abeja, abejas.transform, x * Celda, Sup(y) + extra * Celda);
 
-        // Caracoles para pisar y puerquitos que reinician el nivel
+        // Caracoles para pisar y puerquitos peligrosos
         var mobs = new GameObject("Mobs");
-        foreach (var x in new[] { 18f, 41f, 75f, 99f })
-            Colocar(caracol, mobs.transform, x * Celda, sueloY);
-        foreach (var x in new[] { 27f, 59f, 90f })
-            Colocar(puerquito, mobs.transform, x * Celda, sueloY);
+        foreach (var (x, y) in new (float, int)[] { (18, -3), (41, -3), (75, -3), (99, -2), (132, -3), (165, -3), (186, -3) })
+            Colocar(caracol, mobs.transform, x * Celda, Sup(y));
+        foreach (var (x, y) in new (float, int)[] { (27, -3), (59, -1), (90, -3), (122, -3), (180, -1), (195, -3) })
+            Colocar(puerquito, mobs.transform, x * Celda, Sup(y));
 
         // Zona de caída al vacío (tag puerquito)
         var vacio = new GameObject("Vacio") { tag = "puerquito" };
-        vacio.transform.position = new Vector3(48 * Celda, -2.5f, 0);
+        vacio.transform.position = new Vector3((xMinNivel + xMaxNivel) / 2f * Celda, -2.5f, 0);
         var bv = vacio.AddComponent<BoxCollider2D>();
         bv.isTrigger = true;
-        bv.size = new Vector2(140 * Celda, 0.5f);
+        bv.size = new Vector2((xMaxNivel - xMinNivel + 40) * Celda, 0.5f);
 
         // UI: contador de abejas
         var canvas = NuevoCanvas();
@@ -385,9 +400,7 @@ public static class ConstructorJuego
     static void ConstruirEscenaMenu()
     {
         const string ruta = "Assets/Scenes/MenuPrincipal.unity";
-        AssetDatabase.DeleteAsset(ruta);
-        AssetDatabase.CopyAsset("Assets/Scenes/SampleScene.unity", ruta);
-        var escena = EditorSceneManager.OpenScene(ruta);
+        var escena = EscenaDesdePlantilla(ruta);
         var cam = Camera.main;
         var opciones = cam.gameObject.AddComponent<OpcionesMenu>();
 
@@ -445,7 +458,7 @@ public static class ConstructorJuego
     {
         Carpeta(dir);
         var original = AssetDatabase.LoadAllAssetsAtPath(rutaAse).OfType<AnimationClip>().First();
-        var clip = new AnimationClip { frameRate = original.frameRate, name = nombre };
+        var clip = ClipEnRuta($"{dir}/{nombre}.anim", original.frameRate);
         foreach (var b in AnimationUtility.GetObjectReferenceCurveBindings(original))
         {
             if (b.type != typeof(SpriteRenderer)) continue;
@@ -457,14 +470,50 @@ public static class ConstructorJuego
         var ajustes = AnimationUtility.GetAnimationClipSettings(clip);
         ajustes.loopTime = loop;
         AnimationUtility.SetAnimationClipSettings(clip, ajustes);
-        Guardar(clip, $"{dir}/{nombre}.anim");
-        return AssetDatabase.LoadAssetAtPath<AnimationClip>($"{dir}/{nombre}.anim");
+        EditorUtility.SetDirty(clip);
+        return clip;
     }
 
     static Sprite PrimerSprite(AnimationClip clip) =>
         (Sprite)AnimationUtility.GetObjectReferenceCurve(clip, AnimationUtility.GetObjectReferenceCurveBindings(clip)[0])[0].value;
 
     static AudioClip Audio(string ruta) => AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/" + ruta);
+
+    // ------------------------------------------------------- Decoración
+    static void ConstruirDecoracion((int x0, int x1, int y)[] suelos, (int x0, int x1, int y)[] flotantes, float celda)
+    {
+        var raiz = new GameObject("Decoracion").transform;
+        var azar = new System.Random(11);
+        // (nombre, orden de dibujo, peso)
+        var piezas = new (string n, int orden, int peso)[]
+        {
+            ("Arbusto_1", -2, 3), ("Arbusto_2", -2, 3), ("Arbusto_3", -2, 2),
+            ("Hongo_Grande", -1, 2), ("Hongo_Alto", -1, 1), ("Hongo_Chico_1", -1, 2), ("Hongo_Chico_2", -1, 2), ("Hongo_Chico_3", -1, 2),
+            ("Flor_Azul", -1, 2), ("Flor_Lila", -1, 2), ("Junco", -1, 1), ("Pasto", 3, 4), ("Palo", -1, 1),
+            ("Roca_Musgo_Grande", -3, 1), ("Roca_Musgo_1", -2, 2), ("Roca_Musgo_2", -1, 2), ("Roca_Musgo_3", -1, 1),
+            ("Roca_Musgo_4", -1, 1), ("Roca_Chica", -1, 2),
+        };
+        int total = piezas.Sum(p => p.peso);
+        int k = 0;
+        void Poner(int x0, int x1, int fila, int pasoMin, int pasoMax)
+        {
+            for (int x = x0 + 1 + azar.Next(3); x < x1 - 1; x += pasoMin + azar.Next(pasoMax - pasoMin + 1))
+            {
+                int r = azar.Next(total);
+                var pieza = piezas.First(p => (r -= p.peso) < 0);
+                var sr = new GameObject($"{pieza.n}_{k++}").AddComponent<SpriteRenderer>();
+                sr.sprite = SpriteDecoracion(pieza.n);
+                sr.sortingOrder = pieza.orden;
+                sr.flipX = azar.Next(2) == 0;
+                sr.transform.SetParent(raiz, false);
+                sr.transform.position = new Vector3((x + 0.5f) * celda, (fila + 1) * celda - 0.02f, 0);
+            }
+        }
+        foreach (var (x0, x1, y) in suelos) Poner(x0, x1, y, 2, 5);
+        foreach (var (x0, x1, y) in flotantes) Poner(x0, x1, y, 3, 5);
+    }
+
+    static Sprite SpriteDecoracion(string nombre) => SpriteSuelto("Assets/Sprites/Decoracion/" + nombre + ".png", false);
 
     // ---------------------------------------------------------- Paisaje
     const string RutaPaisaje = "Assets/Sprites/Paisaje/";
@@ -520,9 +569,10 @@ public static class ConstructorJuego
     }
 
     // Importa un PNG del paisaje como sprite pixel art con pivote abajo al centro
-    static Sprite SpritePaisaje(string nombre, bool repetible)
+    static Sprite SpritePaisaje(string nombre, bool repetible) => SpriteSuelto(RutaPaisaje + nombre + ".png", repetible);
+
+    static Sprite SpriteSuelto(string ruta, bool repetible)
     {
-        string ruta = RutaPaisaje + nombre + ".png";
         var imp = (TextureImporter)AssetImporter.GetAtPath(ruta);
         var ajustes = new TextureImporterSettings();
         imp.ReadTextureSettings(ajustes);
@@ -563,15 +613,15 @@ public static class ConstructorJuego
     static AnimationClip ClipDeSprites(Sprite[] cuadros, string dir, string nombre, float fps, bool loop)
     {
         Carpeta(dir);
-        var clip = new AnimationClip { frameRate = fps, name = nombre };
+        var clip = ClipEnRuta($"{dir}/{nombre}.anim", fps);
         var claves = cuadros.Select((s, i) => new ObjectReferenceKeyframe { time = i / fps, value = s }).ToArray();
         AnimationUtility.SetObjectReferenceCurve(clip,
             EditorCurveBinding.PPtrCurve("", typeof(SpriteRenderer), "m_Sprite"), claves);
         var ajustes = AnimationUtility.GetAnimationClipSettings(clip);
         ajustes.loopTime = loop;
         AnimationUtility.SetAnimationClipSettings(clip, ajustes);
-        Guardar(clip, $"{dir}/{nombre}.anim");
-        return AssetDatabase.LoadAssetAtPath<AnimationClip>($"{dir}/{nombre}.anim");
+        EditorUtility.SetDirty(clip);
+        return clip;
     }
 
     static readonly Dictionary<string, TileBase> cacheTiles = new();
@@ -695,8 +745,50 @@ public static class ConstructorJuego
         return prefab;
     }
 
+    // Abre una copia de SampleScene y la guarda encima de la escena destino
+    static UnityEngine.SceneManagement.Scene EscenaDesdePlantilla(string ruta)
+    {
+        var plantilla = EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+        EditorSceneManager.SaveScene(plantilla, ruta, true);
+        return EditorSceneManager.OpenScene(ruta);
+    }
+
+    // Reutiliza el .anim si ya existe para no cambiar su GUID
+    static AnimationClip ClipEnRuta(string ruta, float fps)
+    {
+        var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(ruta);
+        if (clip == null)
+        {
+            clip = new AnimationClip();
+            AssetDatabase.CreateAsset(clip, ruta);
+        }
+        clip.ClearCurves();
+        foreach (var b in AnimationUtility.GetObjectReferenceCurveBindings(clip))
+            AnimationUtility.SetObjectReferenceCurve(clip, b, null);
+        clip.frameRate = fps;
+        return clip;
+    }
+
+    // Reutiliza el .controller si ya existe, vaciando parámetros y estados
+    static AnimatorController Controlador(string ruta)
+    {
+        var ctrl = AssetDatabase.LoadAssetAtPath<AnimatorController>(ruta);
+        if (ctrl == null) return AnimatorController.CreateAnimatorControllerAtPath(ruta);
+        for (int i = ctrl.parameters.Length - 1; i >= 0; i--) ctrl.RemoveParameter(i);
+        var sm = ctrl.layers[0].stateMachine;
+        foreach (var t in sm.anyStateTransitions) sm.RemoveAnyStateTransition(t);
+        foreach (var e in sm.states) sm.RemoveState(e.state);
+        return ctrl;
+    }
+
     static void Guardar(Object obj, string ruta)
     {
+        var existente = AssetDatabase.LoadMainAssetAtPath(ruta);
+        if (existente != null && existente.GetType() == obj.GetType())
+        {
+            EditorUtility.CopySerialized(obj, existente);
+            return;
+        }
         AssetDatabase.DeleteAsset(ruta);
         AssetDatabase.CreateAsset(obj, ruta);
     }
