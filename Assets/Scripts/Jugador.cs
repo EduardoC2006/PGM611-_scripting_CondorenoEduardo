@@ -23,6 +23,9 @@ public class Jugador : MonoBehaviour
     public AudioClip audioAbeja;
     public AudioClip audioAtaque;
     public AudioClip audioMuerte;
+    public AudioClip audioSalto;
+    public AudioClip audioAterrizar;
+    private bool estabaEnPiso = true;
     public Transform puntoAtaque;
     public float radioAtaque = 0.25f;
 
@@ -68,7 +71,10 @@ public class Jugador : MonoBehaviour
             if (movimiento != 0) transform.localScale = new Vector3(Mathf.Sign(movimiento), 1, 1);
         }
         if (Input.GetButtonDown("Jump") && esPiso)
+        {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, alturaSalto);
+            Sonar(audioSalto, 0.6f);
+        }
         if (Input.GetButtonDown("Fire1") && !enRetroceso)
             Atacar();
         animator.SetFloat("Velocidad", Mathf.Abs(movimiento));
@@ -77,14 +83,17 @@ public class Jugador : MonoBehaviour
 
         // Parpadeo mientras es invulnerable
         sr.enabled = Time.time >= invulnerableHasta || (int)(Time.time * 15) % 2 == 0;
-        // Recordar el último lugar firme para reaparecer si cae al vacío
-        if (esPiso && Mathf.Abs(rb.linearVelocity.y) < 0.01f && !enRetroceso)
-            ultimoPisoSeguro = transform.position;
     }
 
     public void FixedUpdate()
     {
         esPiso = Physics2D.OverlapCircle(comprobadorPiso.position, radioComprobadorPiso, layerPiso);
+        if (esPiso && !estabaEnPiso && rb.linearVelocity.y <= 0.01f && !muerto)
+            Sonar(audioAterrizar, 0.5f);
+        estabaEnPiso = esPiso;
+        // Recordar el último lugar firme para reaparecer si cae al vacío
+        if (esPiso && Mathf.Abs(rb.linearVelocity.y) < 0.01f && !enRetroceso)
+            ultimoPisoSeguro = transform.position;
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
@@ -207,9 +216,9 @@ public class Jugador : MonoBehaviour
     }
 
     // Los audios son opcionales: si aún no se asignó un clip, no suena nada
-    void Sonar(AudioClip clip)
+    void Sonar(AudioClip clip, float volumen = 1f)
     {
-        if (audioSource != null && clip != null) audioSource.PlayOneShot(clip);
+        if (audioSource != null && clip != null) audioSource.PlayOneShot(clip, volumen);
     }
 
     void QuitarRetroceso()
@@ -219,6 +228,6 @@ public class Jugador : MonoBehaviour
 
     void Reiniciar()
     {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        Fundido.Cargar(SceneManager.GetActiveScene().name);
     }
 }

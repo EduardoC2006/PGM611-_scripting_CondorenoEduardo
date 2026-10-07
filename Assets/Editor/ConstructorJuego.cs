@@ -207,6 +207,8 @@ public static class ConstructorJuego
         j.audioPuerquito = Audio("Efectos/11_human_damage_1.wav");
         j.audioAtaque = Audio("Efectos/07_human_atk_sword_1.wav");
         j.audioMuerte = Audio("Efectos/14_human_death_spin.wav");
+        j.audioSalto = Audio("Efectos/12_human_jump_1.wav");
+        j.audioAterrizar = Audio("Efectos/13_human_jump_land_1.wav");
 
         Debug.Log($"[Constructor] Sprite Idle rect={sr.sprite.rect} pivot={sr.sprite.pivot}");
         return GuardarPrefab(go, "Assets/Prefab/Jugador.prefab");
@@ -396,7 +398,11 @@ public static class ConstructorJuego
         var pj = (GameObject)PrefabUtility.InstantiatePrefab(jugador);
         pj.transform.position = new Vector3(-8 * Celda, Sup(-3) + 0.1f, 0);
 
-        cam.gameObject.AddComponent<Camara>().target = pj.transform;
+        var camara = cam.gameObject.AddComponent<Camara>();
+        camara.target = pj.transform;
+        camara.limiteIzquierdo = xMinNivel * Celda;
+        camara.limiteDerecho = (xMaxNivel + 1) * Celda;
+        camara.limiteAbajo = Sup(-3) + 0.05f;
         cam.transform.position = new Vector3(pj.transform.position.x, pj.transform.position.y, -10);
 
         // Abejas para recolectar: (x, fila de la superficie debajo, altura extra en casillas)
@@ -510,6 +516,8 @@ public static class ConstructorJuego
         partida.textoVictoria = subVictoria;
         victoria.SetActive(false);
 
+        CrearFundido();
+
         // Cronómetro arriba a la derecha
         var tiempo = Texto(canvas.transform, "TxtTiempo", "00:00", 64, Vector2.zero, new Vector2(300, 100));
         tiempo.rectTransform.anchorMin = tiempo.rectTransform.anchorMax = tiempo.rectTransform.pivot = new Vector2(1, 1);
@@ -616,6 +624,7 @@ public static class ConstructorJuego
         UnityEventTools.AddBoolPersistentListener(btnOpciones.onClick, panelito.SetActive, true);
         UnityEventTools.AddBoolPersistentListener(cerrar.onClick, panelito.SetActive, false);
         panelito.SetActive(false);
+        CrearFundido();
 
         EditorSceneManager.MarkSceneDirty(escena);
         EditorSceneManager.SaveScene(escena);
@@ -680,6 +689,19 @@ public static class ConstructorJuego
                 piso.SetTile(new Vector3Int(x, y, 0), Tile(2 + (ySup - 1 - y) % 2, col));
             piso.SetTile(new Vector3Int(x, ySup - prof, 0), Tile(4, col));
         }
+    }
+
+    // Canvas negro por encima de todo para los fundidos entre escenas
+    static void CrearFundido()
+    {
+        var go = new GameObject("Fundido", typeof(Canvas), typeof(CanvasGroup), typeof(Image));
+        var canvas = go.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 100;
+        go.GetComponent<Image>().color = Color.black;
+        var f = go.AddComponent<Fundido>();
+        f.grupo = go.GetComponent<CanvasGroup>();
+        f.grupo.alpha = 1f;
     }
 
     // ------------------------------------------------------------ Pantallas

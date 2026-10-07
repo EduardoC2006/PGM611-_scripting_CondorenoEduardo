@@ -24,7 +24,7 @@ public class OpcionesMenu : MonoBehaviour
 
     public void vamosAjugar()
     {
-        SceneManager.LoadScene(1);
+        Fundido.Cargar(1);
     }
 
     public void salir()

@@ -103,13 +103,11 @@ public class Partida : MonoBehaviour
 
     public void Reintentar()
     {
-        Time.timeScale = 1f;
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        Fundido.Cargar(SceneManager.GetActiveScene().name);
     }
 
     public void IrAlMenu()
     {
-        Time.timeScale = 1f;
-        SceneManager.LoadScene(0);
+        Fundido.Cargar(0);
     }
 }
