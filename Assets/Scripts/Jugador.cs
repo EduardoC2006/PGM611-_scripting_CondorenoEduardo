@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 using TMPro;
 
 public class Jugador : MonoBehaviour
@@ -24,10 +25,26 @@ public class Jugador : MonoBehaviour
     public Transform puntoAtaque;
     public float radioAtaque = 0.25f;
 
+    // Vidas
+    public int vidasMax = 3;
+    private int vidas;
+    public Image[] corazones;
+    public Sprite corazonLleno;
+    public Sprite corazonVacio;
+    public float tiempoInvulnerable = 1.2f;
+    private float invulnerableHasta;
+    private bool muerto = false;
+    private SpriteRenderer sr;
+    private Vector3 ultimoPisoSeguro;
+
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
+        sr = GetComponent<SpriteRenderer>();
+        vidas = vidasMax;
+        ultimoPisoSeguro = transform.position;
+        ActualizarCorazones();
         // La física 2D debe correr sola en cada FixedUpdate
         Physics2D.simulationMode = SimulationMode2D.FixedUpdate;
         if (puntoAtaque == null)
@@ -40,6 +57,7 @@ public class Jugador : MonoBehaviour
 
     void Update()
     {
+        if (muerto) return;
         if (!enRetroceso)
         {
             movimiento = Input.GetAxisRaw("Horizontal");
@@ -53,6 +71,12 @@ public class Jugador : MonoBehaviour
         animator.SetFloat("Velocidad", Mathf.Abs(movimiento));
         animator.SetFloat("VelocidadVertical", rb.linearVelocity.y);
         animator.SetBool("estaEnPiso", esPiso);
+
+        // Parpadeo mientras es invulnerable
+        sr.enabled = Time.time >= invulnerableHasta || (int)(Time.time * 15) % 2 == 0;
+        // Recordar el último lugar firme para reaparecer si cae al vacío
+        if (esPiso && Mathf.Abs(rb.linearVelocity.y) < 0.01f && !enRetroceso)
+            ultimoPisoSeguro = transform.position;
     }
 
     public void FixedUpdate()
@@ -71,11 +95,8 @@ public class Jugador : MonoBehaviour
         }
         if (collision.transform.CompareTag("puerquito"))
         {
-            Sonar(audioPuerquito);
-            // Se espera un momento para que se alcance a escuchar el sonido
-            enRetroceso = true;
-            rb.linearVelocity = Vector2.zero;
-            Invoke(nameof(Reiniciar), 0.5f);
+            if (collision.name == "Vacio") CaerAlVacio();
+            else RecibirDanio(collision.transform.position);
         }
         if (collision.transform.CompareTag("caracol"))
         {
@@ -91,6 +112,61 @@ public class Jugador : MonoBehaviour
             Destroy(collision.gameObject, 0.4f);
             Invoke(nameof(QuitarRetroceso), 0.2f);
         }
+    }
+
+    // Si se queda tocando al puerquito, vuelve a dañar cuando termina la invulnerabilidad
+    private void OnTriggerStay2D(Collider2D collision)
+    {
+        if (collision.CompareTag("puerquito") && collision.name != "Vacio")
+            RecibirDanio(collision.transform.position);
+    }
+
+    public void RecibirDanio(Vector3 origen)
+    {
+        if (muerto || Time.time < invulnerableHasta) return;
+        PerderVida();
+        if (muerto) return;
+        // Empujón hacia atrás
+        enRetroceso = true;
+        float lado = Mathf.Sign(transform.position.x - origen.x);
+        if (lado == 0) lado = -transform.localScale.x;
+        rb.linearVelocity = new Vector2(lado * 2.5f, 2.5f);
+        Invoke(nameof(QuitarRetroceso), 0.35f);
+    }
+
+    void CaerAlVacio()
+    {
+        if (muerto) return;
+        invulnerableHasta = 0;
+        PerderVida();
+        if (muerto) return;
+        // Reaparece un poco antes del borde desde donde cayó
+        transform.position = ultimoPisoSeguro + new Vector3(-transform.localScale.x * 0.2f, 0.1f, 0);
+        rb.linearVelocity = Vector2.zero;
+    }
+
+    void PerderVida()
+    {
+        vidas--;
+        ActualizarCorazones();
+        Sonar(audioPuerquito);
+        invulnerableHasta = Time.time + tiempoInvulnerable;
+        if (vidas <= 0) Morir();
+    }
+
+    void Morir()
+    {
+        muerto = true;
+        sr.enabled = true;
+        rb.linearVelocity = Vector2.zero;
+        Invoke(nameof(Reiniciar), 1f);
+    }
+
+    void ActualizarCorazones()
+    {
+        if (corazones == null) return;
+        for (int i = 0; i < corazones.Length; i++)
+            if (corazones[i] != null) corazones[i].sprite = i < vidas ? corazonLleno : corazonVacio;
     }
 
     // Golpe de espada: elimina puerquitos y caracoles que estén enfrente

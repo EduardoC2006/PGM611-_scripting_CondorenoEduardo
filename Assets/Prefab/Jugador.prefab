@@ -339,6 +339,11 @@ MonoBehaviour:
   audioAtaque: {fileID: 8300000, guid: ede6d627432a53386b9cb0d3bb85f275, type: 3}
   puntoAtaque: {fileID: 301425070846326116}
   radioAtaque: 0.25
+  vidasMax: 3
+  corazones: []
+  corazonLleno: {fileID: 0}
+  corazonVacio: {fileID: 0}
+  tiempoInvulnerable: 1.2
 --- !u!1 &7187063818752155785
 GameObject:
   m_ObjectHideFlags: 0

@@ -382,15 +382,32 @@ public static class ConstructorJuego
         var img = marcador.GetComponent<Image>();
         img.sprite = PrimerSprite(AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Animaciones/Abeja/Fly.anim"));
         img.preserveAspect = true;
-        Esquina(marcador.GetComponent<RectTransform>(), new Vector2(20, -20), new Vector2(120, 120));
+        Esquina(marcador.GetComponent<RectTransform>(), new Vector2(24, -110), new Vector2(100, 100));
 
         var txt = new GameObject("TxtAbejas", typeof(RectTransform)).AddComponent<TextMeshProUGUI>();
         txt.transform.SetParent(canvas.transform, false);
         txt.text = "0";
         txt.fontSize = 64;
         txt.alignment = TextAlignmentOptions.MidlineLeft;
-        Esquina(txt.rectTransform, new Vector2(150, -20), new Vector2(300, 120));
-        pj.GetComponent<Jugador>().textoAbejas = txt;
+        Esquina(txt.rectTransform, new Vector2(135, -110), new Vector2(300, 100));
+        var jug = pj.GetComponent<Jugador>();
+        jug.textoAbejas = txt;
+
+        // UI: corazones de vida
+        jug.corazonLleno = SpriteSuelto("Assets/Sprites/HUD/Corazon_Lleno.png", false);
+        jug.corazonVacio = SpriteSuelto("Assets/Sprites/HUD/Corazon_Vacio.png", false);
+        jug.corazones = new Image[jug.vidasMax];
+        for (int i = 0; i < jug.vidasMax; i++)
+        {
+            var c = new GameObject($"Corazon_{i + 1}", typeof(RectTransform), typeof(Image));
+            c.transform.SetParent(canvas.transform, false);
+            var ci = c.GetComponent<Image>();
+            ci.sprite = jug.corazonLleno;
+            ci.preserveAspect = true;
+            Esquina(c.GetComponent<RectTransform>(), new Vector2(30 + i * 90, -24), new Vector2(78, 72));
+            jug.corazones[i] = ci;
+        }
+        PrefabUtility.RecordPrefabInstancePropertyModifications(jug);
 
         EditorSceneManager.MarkSceneDirty(escena);
         EditorSceneManager.SaveScene(escena);
