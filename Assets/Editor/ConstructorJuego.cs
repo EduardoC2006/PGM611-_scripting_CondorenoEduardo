@@ -178,6 +178,7 @@ public static class ConstructorJuego
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
         rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        rb.gravityScale = 1.5f; // caída más rápida: el salto se siente más ágil
 
         var cap = go.AddComponent<CapsuleCollider2D>();
         var b = sr.sprite.bounds;
@@ -196,6 +197,7 @@ public static class ConstructorJuego
         go.AddComponent<AudioSource>().playOnAwake = false;
         var j = go.AddComponent<Jugador>();
         j.velocidad = 2f;
+        j.alturaSalto = 6f;
         j.comprobadorPiso = comprobador.transform;
         j.layerPiso = LayerMask.GetMask("Pisito");
         j.puntoAtaque = punto.transform;
@@ -220,30 +222,65 @@ public static class ConstructorJuego
         var b = go.GetComponent<SpriteRenderer>().sprite.bounds;
         cap.size = new Vector2(0.2f, 0.3f);
         cap.offset = b.center;
+        go.AddComponent<Flotar>();
         return GuardarPrefab(go, "Assets/Prefab/Abeja.prefab");
     }
 
     static GameObject CrearPuerquito()
     {
-        var clip = ExportarClip(Pack + "/Mob/Boar/Idle/Idle.aseprite", "Assets/Animaciones/Puerquito", "Idle", true);
-        var go = Mob("Puerquito", clip, "Assets/Animaciones/Puerquito/Puerquito.controller", "puerquito");
+        string dir = "Assets/Animaciones/Puerquito";
+        AssetDatabase.DeleteAsset(dir + "/Idle.anim"); // ya no se usa: ahora patrulla
+        var caminar = ExportarClip(Pack + "/Mob/Boar/Walk/Walk-Base.aseprite", dir, "Walk", true);
+        var correr = ExportarClip(Pack + "/Mob/Boar/Run/Run.aseprite", dir, "Run", true);
+        var golpe = ExportarClip(Pack + "/Mob/Boar/Hit-Vanish/Hit.aseprite", dir, "Hit", false);
+
+        var ctrl = Controlador(dir + "/Puerquito.controller");
+        ctrl.AddParameter("Corriendo", AnimatorControllerParameterType.Bool);
+        ctrl.AddParameter("Muere", AnimatorControllerParameterType.Trigger);
+        var sm = ctrl.layers[0].stateMachine;
+        var sCaminar = sm.AddState("Walk");
+        var sCorrer = sm.AddState("Run");
+        var sGolpe = sm.AddState("Hit");
+        sCaminar.motion = caminar; sCorrer.motion = correr; sGolpe.motion = golpe;
+        sm.defaultState = sCaminar;
+        Transicion(sCaminar, sCorrer, ("Corriendo", AnimatorConditionMode.If, 0));
+        Transicion(sCorrer, sCaminar, ("Corriendo", AnimatorConditionMode.IfNot, 0));
+        CualquierA(sm, sGolpe, "Muere");
+
+        var go = Enemigo("Puerquito", "puerquito", caminar, ctrl, 0.35f, 0.9f, true);
         var cap = go.AddComponent<CapsuleCollider2D>();
         cap.isTrigger = true;
         cap.direction = CapsuleDirection2D.Horizontal;
         var b = go.GetComponent<SpriteRenderer>().sprite.bounds;
-        cap.size = new Vector2(b.size.x - 0.06f, b.size.y - 0.05f);
+        cap.size = new Vector2(b.size.x - 0.08f, b.size.y - 0.06f);
         cap.offset = b.center;
+        go.GetComponent<Enemigo>().mitadAncho = b.extents.x;
         return GuardarPrefab(go, "Assets/Prefab/Puerquito.prefab");
     }
 
     static GameObject CrearCaracol()
     {
-        // Animación de muerte sin Loop Time; el Animator arranca apagado y se activa al pisarlo
-        var cuadros = AssetDatabase.LoadAllAssetsAtPath(Pack + "/Mob/Snail/Dead-Sheet.png").OfType<Sprite>()
+        string dir = "Assets/Animaciones/Caracol";
+        // Las hojas del caracol vienen como una sola imagen: 8 cuadros de 48x32
+        string rutaCaminar = Pack + "/Mob/Snail/walk-Sheet.png";
+        if (((TextureImporter)AssetImporter.GetAtPath(rutaCaminar)).spriteImportMode != SpriteImportMode.Multiple)
+            CortarHoja(rutaCaminar, 48, 32, "walk-Sheet", new Vector2(0.5f, 0f));
+        Sprite[] Cuadros(string ruta) => AssetDatabase.LoadAllAssetsAtPath(ruta).OfType<Sprite>()
             .OrderBy(s => int.Parse(s.name.Split('_')[1])).ToArray();
-        var clip = ClipDeSprites(cuadros, "Assets/Animaciones/Caracol", "Dead", 12, false);
-        var go = Mob("Caracol", clip, "Assets/Animaciones/Caracol/Caracol.controller", "caracol");
-        go.GetComponent<Animator>().enabled = false;
+        var caminar = ClipDeSprites(Cuadros(rutaCaminar), dir, "Walk", 8, true);
+        var muerte = ClipDeSprites(Cuadros(Pack + "/Mob/Snail/Dead-Sheet.png"), dir, "Dead", 12, false);
+
+        var ctrl = Controlador(dir + "/Caracol.controller");
+        ctrl.AddParameter("Muere", AnimatorControllerParameterType.Trigger);
+        var sm = ctrl.layers[0].stateMachine;
+        var sCaminar = sm.AddState("Walk");
+        var sMuerte = sm.AddState("Dead");
+        sCaminar.motion = caminar; sMuerte.motion = muerte;
+        sm.defaultState = sCaminar;
+        CualquierA(sm, sMuerte, "Muere");
+
+        var go = Enemigo("Caracol", "caracol", caminar, ctrl, 0.18f, 0.6f, false);
+        go.GetComponent<Enemigo>().mitadAncho = 0.14f;
 
         var box = go.AddComponent<BoxCollider2D>();
         // Caparazón sólido abajo, trigger de pisotón encima (cabeza libre)
@@ -256,6 +293,33 @@ public static class ConstructorJuego
         cap.size = new Vector2(0.27f, 0.08f);
         cap.offset = new Vector2(0, 0.19f);
         return GuardarPrefab(go, "Assets/Prefab/Caracol.prefab");
+    }
+
+    // Enemigo con cuerpo cinemático que se mueve con el script Enemigo
+    static GameObject Enemigo(string nombre, string tag, AnimationClip clip, AnimatorController ctrl,
+        float velocidad, float rango, bool persigue)
+    {
+        var go = new GameObject(nombre) { tag = tag };
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = PrimerSprite(clip);
+        sr.sortingOrder = 2;
+        go.AddComponent<Animator>().runtimeAnimatorController = ctrl;
+        var rb = go.AddComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        var e = go.AddComponent<Enemigo>();
+        e.velocidad = velocidad;
+        e.rangoPatrulla = rango;
+        e.persigue = persigue;
+        e.layerPiso = LayerMask.GetMask("Pisito");
+        return go;
+    }
+
+    static void CualquierA(AnimatorStateMachine sm, AnimatorState destino, string trigger)
+    {
+        var t = sm.AddAnyStateTransition(destino);
+        t.hasExitTime = false; t.duration = 0; t.canTransitionToSelf = false;
+        t.AddCondition(AnimatorConditionMode.If, 0, trigger);
     }
 
     static GameObject Mob(string nombre, AnimationClip clip, string rutaCtrl, string tag)
@@ -310,8 +374,8 @@ public static class ConstructorJuego
         // Plataformas flotantes de un bloque de alto
         var flotantes = new (int x0, int x1, int y)[]
         {
-            (10, 15, 1), (42, 47, 1), (53, 58, 3), (80, 86, 1), (100, 104, 2),
-            (125, 130, 0), (143, 146, -1), (150, 153, 0), (175, 179, 3),
+            (10, 15, 3), (42, 47, 3), (53, 58, 5), (80, 86, 3), (100, 104, 4),
+            (125, 130, 3), (143, 146, -1), (150, 153, 0), (175, 179, 5),
         };
         int xMinNivel = -14, xMaxNivel = 205;
         float Sup(int fila) => (fila + 1) * Celda; // altura del borde superior de una fila
@@ -362,10 +426,10 @@ public static class ConstructorJuego
         var abejas = new GameObject("Abejas");
         var posAbejas = new (float x, int y, float extra)[]
         {
-            (-2, -3, 0), (4, -3, 0), (12.5f, 1, 0), (22, -3, 0), (38, -3, 0), (44.5f, 1, 0),
-            (55.5f, 3, 0), (60, -1, 0), (72, -3, 0), (83, 1, 0), (92, -3, 0), (102, 2, 0),
-            (108, -2, 0), (113, -3, 5), (120, -3, 0), (127.5f, 0, 0), (144.5f, -1, 0), (151.5f, 0, 0),
-            (162, -3, 0), (168, -3, 0), (177, 3, 0), (186, -3, 0), (191, -3, 0),
+            (-2, -3, 0), (4, -3, 0), (12.5f, 3, 0), (22, -3, 0), (38, -3, 0), (44.5f, 3, 0),
+            (55.5f, 5, 0), (60, -1, 0), (72, -3, 0), (83, 3, 0), (92, -3, 0), (102, 4, 0),
+            (108, -2, 0), (113, -3, 5), (120, -3, 0), (127.5f, 3, 0), (144.5f, -1, 0), (151.5f, 0, 0),
+            (162, -3, 0), (168, -3, 0), (177, 5, 0), (186, -3, 0), (191, -3, 0),
         };
         foreach (var (x, y, extra) in posAbejas)
             Colocar(abeja, abejas.transform, x * Celda, Sup(y) + extra * Celda);

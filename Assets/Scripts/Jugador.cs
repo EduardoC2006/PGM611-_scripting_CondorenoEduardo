@@ -107,11 +107,7 @@ public class Jugador : MonoBehaviour
             Vector2 arrastre = (rb.position - (Vector2)collision.transform.position).normalized * 3;
             rb.linearVelocity = Vector2.zero;
             rb.AddForce(arrastre, ForceMode2D.Impulse);
-            Collider2D[] colliders = collision.GetComponents<Collider2D>();
-            foreach (Collider2D col in colliders)
-                col.enabled = false;
-            collision.GetComponent<Animator>().enabled = true;
-            Destroy(collision.gameObject, 0.4f);
+            collision.GetComponent<Enemigo>().Morir();
             Invoke(nameof(QuitarRetroceso), 0.2f);
         }
     }
@@ -189,18 +185,11 @@ public class Jugador : MonoBehaviour
         Collider2D[] golpeados = Physics2D.OverlapCircleAll(puntoAtaque.position, radioAtaque);
         foreach (Collider2D golpe in golpeados)
         {
-            if (golpe.CompareTag("puerquito") && golpe.name != "Vacio")
+            Enemigo enemigo = golpe.GetComponent<Enemigo>();
+            if (enemigo != null && (golpe.CompareTag("puerquito") || golpe.CompareTag("caracol")))
             {
                 Sonar(audioCaracol);
-                Destroy(golpe.gameObject);
-            }
-            else if (golpe.CompareTag("caracol"))
-            {
-                Sonar(audioCaracol);
-                foreach (Collider2D col in golpe.GetComponents<Collider2D>())
-                    col.enabled = false;
-                golpe.GetComponent<Animator>().enabled = true;
-                Destroy(golpe.gameObject, 0.4f);
+                enemigo.Morir();
             }
         }
     }
