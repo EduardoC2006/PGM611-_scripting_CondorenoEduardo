@@ -22,6 +22,7 @@ public class Jugador : MonoBehaviour
     public AudioClip audioCaracol;
     public AudioClip audioAbeja;
     public AudioClip audioAtaque;
+    public AudioClip audioMuerte;
     public Transform puntoAtaque;
     public float radioAtaque = 0.25f;
 
@@ -86,6 +87,7 @@ public class Jugador : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
+        if (muerto) return;
         if (collision.transform.CompareTag("abejita"))
         {
             Sonar(audioAbeja);
@@ -139,9 +141,8 @@ public class Jugador : MonoBehaviour
         if (muerto) return;
         invulnerableHasta = 0;
         PerderVida();
-        if (muerto) return;
-        // Reaparece un poco antes del borde desde donde cayó
-        transform.position = ultimoPisoSeguro + new Vector3(-transform.localScale.x * 0.2f, 0.1f, 0);
+        // Reaparece un poco antes del borde desde donde cayó (también si murió, para ver la animación)
+        transform.position = ultimoPisoSeguro + new Vector3(-transform.localScale.x * 0.2f, muerto ? 0f : 0.1f, 0);
         rb.linearVelocity = Vector2.zero;
     }
 
@@ -158,8 +159,18 @@ public class Jugador : MonoBehaviour
     {
         muerto = true;
         sr.enabled = true;
+        CancelInvoke(nameof(QuitarRetroceso));
         rb.linearVelocity = Vector2.zero;
-        Invoke(nameof(Reiniciar), 1f);
+        rb.bodyType = RigidbodyType2D.Kinematic; // queda quieto mientras cae su animación
+        animator.SetTrigger("Muerto");
+        Sonar(audioMuerte);
+        Invoke(nameof(FinDeMuerte), 1.5f);
+    }
+
+    void FinDeMuerte()
+    {
+        if (Partida.instancia != null) Partida.instancia.MostrarGameOver(cantAbejas);
+        else Reiniciar();
     }
 
     void ActualizarCorazones()

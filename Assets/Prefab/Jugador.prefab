@@ -337,6 +337,7 @@ MonoBehaviour:
   audioCaracol: {fileID: 8300000, guid: 745021cc0ad739b369cf86a56250c102, type: 3}
   audioAbeja: {fileID: 8300000, guid: 55308ed17b2cdd515846672777a9eaa6, type: 3}
   audioAtaque: {fileID: 8300000, guid: ede6d627432a53386b9cb0d3bb85f275, type: 3}
+  audioMuerte: {fileID: 8300000, guid: b8b6edcb642467b329ef4846edc2e959, type: 3}
   puntoAtaque: {fileID: 301425070846326116}
   radioAtaque: 0.25
   vidasMax: 3

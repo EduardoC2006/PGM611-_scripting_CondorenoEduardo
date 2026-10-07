@@ -125,6 +125,7 @@ public static class ConstructorJuego
         var jump = ExportarClip(Pack + "/Character/Jump/Jump.aseprite", dir, "Jump", false);
         var jumpEnd = ExportarClip(Pack + "/Character/Jump-End/Jump-End.aseprite", dir, "Jump-End", false);
         var ataque = ExportarClip(Pack + "/Character/Attack-01/Attack-01.aseprite", dir, "Attack-01", false);
+        var muerte = ExportarClip(Pack + "/Character/Dead/Dead.aseprite", dir, "Dead", false);
 
         // PjController con parámetros y transiciones del PDF
         var ctrl = Controlador(dir + "/PjController.controller");
@@ -132,6 +133,7 @@ public static class ConstructorJuego
         ctrl.AddParameter("VelocidadVertical", AnimatorControllerParameterType.Float);
         ctrl.AddParameter("estaEnPiso", AnimatorControllerParameterType.Bool);
         ctrl.AddParameter("Atacar", AnimatorControllerParameterType.Trigger);
+        ctrl.AddParameter("Muerto", AnimatorControllerParameterType.Trigger);
         var sm = ctrl.layers[0].stateMachine;
         var sIdle = sm.AddState("Idle", new Vector3(300, 0));
         var sRun = sm.AddState("Run", new Vector3(300, 120));
@@ -146,6 +148,12 @@ public static class ConstructorJuego
         anyAtaque.AddCondition(AnimatorConditionMode.If, 0, "Atacar");
         var finAtaque = sAtaque.AddTransition(sIdle);
         finAtaque.hasExitTime = true; finAtaque.exitTime = 1f; finAtaque.duration = 0;
+        // Muerte: desde cualquier estado y sin salida
+        var sMuerte = sm.AddState("Dead", new Vector3(300, 240));
+        sMuerte.motion = muerte;
+        var anyMuerte = sm.AddAnyStateTransition(sMuerte);
+        anyMuerte.hasExitTime = false; anyMuerte.duration = 0; anyMuerte.canTransitionToSelf = false;
+        anyMuerte.AddCondition(AnimatorConditionMode.If, 0, "Muerto");
 
         Transicion(sIdle, sRun, ("Velocidad", AnimatorConditionMode.Greater, 0.1f));
         Transicion(sRun, sIdle, ("Velocidad", AnimatorConditionMode.Less, 0.1f));
@@ -196,6 +204,7 @@ public static class ConstructorJuego
         j.audioCaracol = Audio("Efectos/26_sword_hit_1.wav");
         j.audioPuerquito = Audio("Efectos/11_human_damage_1.wav");
         j.audioAtaque = Audio("Efectos/07_human_atk_sword_1.wav");
+        j.audioMuerte = Audio("Efectos/14_human_death_spin.wav");
 
         Debug.Log($"[Constructor] Sprite Idle rect={sr.sprite.rect} pivot={sr.sprite.pivot}");
         return GuardarPrefab(go, "Assets/Prefab/Jugador.prefab");
@@ -409,6 +418,21 @@ public static class ConstructorJuego
         }
         PrefabUtility.RecordPrefabInstancePropertyModifications(jug);
 
+        // Partida: controla las pantallas de fin de juego
+        var partida = new GameObject("Partida").AddComponent<Partida>();
+        partida.musica = musica;
+        var recursos = RecursosUI();
+
+        // Pantalla de Game Over (oculta hasta que el jugador muere)
+        var (gameOver, subGameOver) = PanelPantalla(canvas.transform, "PanelGameOver", "GAME OVER", new Color(0.85f, 0.2f, 0.2f));
+        var reintentar = Boton(gameOver.transform, recursos, "REINTENTAR", new Vector2(0, -90), "BLANK_BOTTOM");
+        var menuGO = Boton(gameOver.transform, recursos, "MENU", new Vector2(0, -230), "BLANK_BOTTOM");
+        UnityEventTools.AddPersistentListener(reintentar.onClick, partida.Reintentar);
+        UnityEventTools.AddPersistentListener(menuGO.onClick, partida.IrAlMenu);
+        partida.panelGameOver = gameOver;
+        partida.textoGameOver = subGameOver;
+        gameOver.SetActive(false);
+
         EditorSceneManager.MarkSceneDirty(escena);
         EditorSceneManager.SaveScene(escena);
     }
@@ -422,11 +446,7 @@ public static class ConstructorJuego
         var opciones = cam.gameObject.AddComponent<OpcionesMenu>();
 
         var canvas = NuevoCanvas();
-        var recursos = new TMP_DefaultControls.Resources
-        {
-            standard = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"),
-            background = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd"),
-        };
+        var recursos = RecursosUI();
 
         // Fondo
         var fondo = new GameObject("Fondo", typeof(RectTransform), typeof(Image));
@@ -467,6 +487,27 @@ public static class ConstructorJuego
 
         EditorSceneManager.MarkSceneDirty(escena);
         EditorSceneManager.SaveScene(escena);
+    }
+
+    // ------------------------------------------------------------ Pantallas
+    static TMP_DefaultControls.Resources RecursosUI() => new TMP_DefaultControls.Resources
+    {
+        standard = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"),
+        background = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd"),
+    };
+
+    // Panel a pantalla completa con fondo oscuro, un título y un subtítulo
+    static (GameObject panel, TextMeshProUGUI subtitulo) PanelPantalla(Transform canvas, string nombre, string titulo, Color colorTitulo)
+    {
+        var panel = new GameObject(nombre, typeof(RectTransform), typeof(Image));
+        panel.transform.SetParent(canvas, false);
+        Estirar(panel.GetComponent<RectTransform>());
+        panel.GetComponent<Image>().color = new Color(0.05f, 0.07f, 0.06f, 0.82f);
+        var t = Texto(panel.transform, "Titulo", titulo, 130, new Vector2(0, 230), new Vector2(1600, 180));
+        t.fontStyle = FontStyles.Bold;
+        t.color = colorTitulo;
+        var sub = Texto(panel.transform, "Subtitulo", "", 50, new Vector2(0, 90), new Vector2(1400, 120));
+        return (panel, sub);
     }
 
     // ------------------------------------------------------------ Utilidades
