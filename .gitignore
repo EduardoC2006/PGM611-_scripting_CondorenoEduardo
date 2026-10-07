@@ -104,3 +104,17 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Plastic SCM (workspace local)
+/.plastic/
+ignore.conf
+
+# Solución generada por el editor
+*.slnx
+
+# Archivos generados por el IDE y Unity Version Control
+*.csproj
+*.sln
+*.slnx
+.plastic/
+ignore.conf
