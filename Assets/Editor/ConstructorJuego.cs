@@ -116,6 +116,28 @@ public static class ConstructorJuego
         Debug.Log("[Constructor] Construir OK");
     }
 
+    // ---------------------------------------------------------- Exportar
+    // File > Build Profiles hace lo mismo; esto permite exportar desde la línea de comandos
+    [MenuItem("Juego/3. Exportar ejecutable (Linux)")]
+    public static void Exportar()
+    {
+        PlayerSettings.companyName = "Jhoel Condoreno";
+        PlayerSettings.productName = "High Forest";
+        PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
+        PlayerSettings.defaultScreenWidth = 1280;
+        PlayerSettings.defaultScreenHeight = 720;
+        PlayerSettings.resizableWindow = true;
+        var opciones = new BuildPlayerOptions
+        {
+            scenes = EditorBuildSettings.scenes.Where(e => e.enabled).Select(e => e.path).ToArray(),
+            locationPathName = "Build/Linux/HighForest.x86_64",
+            target = BuildTarget.StandaloneLinux64,
+            options = BuildOptions.None,
+        };
+        var reporte = BuildPipeline.BuildPlayer(opciones);
+        Debug.Log($"[Constructor] Exportar: {reporte.summary.result} ({reporte.summary.totalSize / (1024 * 1024)} MB)");
+    }
+
     // ------------------------------------------------------------ Personaje
     static GameObject CrearJugador(PhysicsMaterial2D solido)
     {
